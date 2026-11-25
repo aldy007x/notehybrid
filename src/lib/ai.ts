@@ -14,8 +14,13 @@
  *   • `model.initializeDeviceModel(cb)` must be called after a user
  *     interaction and before the first prompt request.
  *   • `result.response.inferenceSource` reports where inference ACTUALLY
- *     ran: "ON_DEVICE" or "IN_CLOUD". We display this honestly in the UI —
- *     a requested on-device route that fell back is shown as cloud.
+ *     ran. Its wire values are the lowercase `InferenceSource.ON_DEVICE`
+ *     ("on_device") / `InferenceSource.IN_CLOUD` ("in_cloud") — always
+ *     compare against the enum, never against uppercase literals. We
+ *     display this honestly in the UI — a requested on-device route that
+ *     fell back is shown as cloud. When the SDK leaves the source
+ *     unreported, the badge falls back to a probe-based derivation (see
+ *     `deriveRouteDisplay`).
  *   • On-device inference is single-turn only (no multi-turn chat), so the
  *     "Ask my notes" feature sends stateless streaming requests with the
  *     conversation history embedded in the prompt, via PREFER_IN_CLOUD.
@@ -25,6 +30,7 @@ import {
   getGenerativeModel,
   GoogleAIBackend,
   InferenceMode,
+  InferenceSource,
   type GenerativeModel,
 } from "firebase/ai";
 import { getFirebaseServices } from "./firebase";
@@ -44,7 +50,14 @@ export interface AiRunResult {
   requestedMode: InferenceMode;
   /** Where the SDK says inference actually ran. */
   actualRoute: ActualRoute;
-  /** True when we asked for on-device but the SDK served it from cloud. */
+  /**
+   * On-device availability probed right after the call, but ONLY when the
+   * SDK left `actualRoute` UNKNOWN — it feeds the badge derivation in
+   * `deriveRouteDisplay`. Null when the SDK reported a route (no probe
+   * needed) or the probe has not run.
+   */
+  onDeviceAvailability: OnDeviceAvailability | null;
+  /** True when we asked for on-device but the call was served from cloud. */
   fellBackToCloud: boolean;
   latencyMs: number;
   model: string;
@@ -142,9 +155,87 @@ function createHybridModel(mode: InferenceMode): GenerativeModel {
 }
 
 function actualRouteOf(response: { inferenceSource?: unknown }): ActualRoute {
+  // Compare against the InferenceSource enum, NOT uppercase literals: the
+  // SDK's wire values are lowercase ("on_device" / "in_cloud"). Comparing
+  // against "ON_DEVICE"/"IN_CLOUD" never matches — that was the original
+  // badge bug: inferenceSource WAS populated on every response, yet every
+  // result silently degraded to UNKNOWN and the badge showed
+  // "Route unreported".
   const src = response?.inferenceSource;
-  if (src === "ON_DEVICE" || src === "IN_CLOUD") return src;
+  if (src === InferenceSource.ON_DEVICE) return "ON_DEVICE";
+  if (src === InferenceSource.IN_CLOUD) return "IN_CLOUD";
   return "UNKNOWN";
+}
+
+/** How the route badge should present one finished call. */
+export interface RouteDisplay {
+  label: string;
+  kind: "device" | "cloud" | "unknown";
+  fellBackToCloud: boolean;
+}
+
+/**
+ * Decide what the route badge says for a finished call.
+ *
+ * Evidence hierarchy — the badge never claims more than the evidence
+ * supports:
+ *
+ *  1. The SDK-reported `inferenceSource` (AiRunResult.actualRoute) always
+ *     wins: it is the SDK stating where the request was actually served.
+ *     ON_DEVICE → "On-device"; IN_CLOUD after an on-device request →
+ *     "Cloud · fallback"; IN_CLOUD after a cloud request → "Cloud".
+ *
+ *  2. When the SDK leaves the source unreported (actualRoute UNKNOWN —
+ *     e.g. a browser/SDK combination that doesn't populate the field), we
+ *     derive the route from the requested mode plus the same
+ *     `LanguageModel.availability()` probe the Hybrid status panel uses,
+ *     captured right after the successful call:
+ *       • Asked cloud (PREFER_IN_CLOUD) → "Cloud": the SDK tries the
+ *         cloud endpoint first in this mode, and the successful request
+ *         was observed going there.
+ *       • Asked on-device while the probe says the on-device model is
+ *         "unavailable"/"unsupported" in this browser → the device
+ *         provably could not have served the request, so the successful
+ *         result must have come from the cloud fallback:
+ *         "Cloud · fallback (on-device unavailable on this device)".
+ *       • Asked on-device while the probe says a device model IS
+ *         available → either side could have served it and we cannot
+ *         prove which, so the badge claims only
+ *         "On-device (unconfirmed)".
+ */
+export function deriveRouteDisplay(result: AiRunResult): RouteDisplay {
+  const askedDevice =
+    result.requestedMode === InferenceMode.PREFER_ON_DEVICE ||
+    result.requestedMode === InferenceMode.ONLY_ON_DEVICE;
+  if (result.actualRoute === "ON_DEVICE") {
+    return { label: "On-device", kind: "device", fellBackToCloud: false };
+  }
+  if (result.actualRoute === "IN_CLOUD") {
+    return {
+      label: askedDevice ? "Cloud · fallback" : "Cloud",
+      kind: "cloud",
+      fellBackToCloud: askedDevice,
+    };
+  }
+  // actualRoute === "UNKNOWN": SDK did not report — derive (see above).
+  if (!askedDevice) {
+    return { label: "Cloud", kind: "cloud", fellBackToCloud: false };
+  }
+  if (
+    result.onDeviceAvailability === "unavailable" ||
+    result.onDeviceAvailability === "unsupported"
+  ) {
+    return {
+      label: "Cloud · fallback (on-device unavailable on this device)",
+      kind: "cloud",
+      fellBackToCloud: true,
+    };
+  }
+  return {
+    label: "On-device (unconfirmed)",
+    kind: "device",
+    fellBackToCloud: false,
+  };
 }
 
 /** Run a single-turn prompt through the hybrid router and report honestly. */
@@ -159,15 +250,21 @@ export async function runHybridPrompt(
   const result = await model.generateContent(prompt);
   const latencyMs = Math.round(performance.now() - started);
   const actualRoute = actualRouteOf(result.response);
-  return {
+  // Probe availability only when the SDK left the route unreported — the
+  // probe result feeds the badge derivation (deriveRouteDisplay).
+  const onDeviceAvailability =
+    actualRoute === "UNKNOWN" ? await checkOnDeviceAvailability() : null;
+  const run: AiRunResult = {
     text: result.response.text(),
     requestedMode: mode,
     actualRoute,
-    fellBackToCloud:
-      mode === InferenceMode.PREFER_ON_DEVICE && actualRoute === "IN_CLOUD",
+    onDeviceAvailability,
+    fellBackToCloud: false,
     latencyMs,
     model: CLOUD_MODEL,
   };
+  run.fellBackToCloud = deriveRouteDisplay(run).fellBackToCloud;
+  return run;
 }
 
 /** The four AI actions available on a note. */
@@ -270,16 +367,25 @@ export async function askNotesStream(
       onChunk(text);
     }
   }
+  // inferenceSource only exists on the FINAL aggregated response (the SDK
+  // threads it through processStream into streamResult.response) — reading
+  // it from an individual stream chunk would be too early.
   const response = await streamResult.response;
   const latencyMs = Math.round(performance.now() - started);
-  return {
+  const actualRoute = actualRouteOf(response);
+  const onDeviceAvailability =
+    actualRoute === "UNKNOWN" ? await checkOnDeviceAvailability() : null;
+  const run: AiRunResult = {
     text,
     requestedMode: InferenceMode.PREFER_IN_CLOUD,
-    actualRoute: actualRouteOf(response),
+    actualRoute,
+    onDeviceAvailability,
     fellBackToCloud: false,
     latencyMs,
     model: CLOUD_MODEL,
   };
+  run.fellBackToCloud = deriveRouteDisplay(run).fellBackToCloud;
+  return run;
 }
 
 /** Truncate the note collection into a bounded context block for Ask. */

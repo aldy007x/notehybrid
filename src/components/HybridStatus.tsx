@@ -94,7 +94,7 @@ export function HybridStatus() {
       {!onDeviceUsable && availability !== null && !demoMode && (
         <p className="status-note">
           On-device requests will be served by the cloud fallback — result
-          badges will say so.
+          badges will show “Cloud · fallback”.
         </p>
       )}
     </section>

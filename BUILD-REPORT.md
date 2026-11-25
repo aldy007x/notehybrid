@@ -245,3 +245,66 @@ annotated as superseded).
 - After: `assets/index-ClV-ZKJl.js` — asset name/hash changed, index
   HTTP 200, fetched bundle contains `gemini-3.5-flash-lite` ×1 and
   `gemini-2.5-flash-lite` ×0.
+
+---
+
+## Fix addendum — 2026-11-25 (route badge: inferenceSource enum-case bug + derivation fallback)
+
+### Problem (found by the live retest)
+All AI actions worked live, but every route badge read
+"Route unreported (asked: on-device)" / "(asked: cloud)".
+
+### Root cause — a plain bug, not an absent field
+`inferenceSource` IS populated by the SDK on every response
+(`createEnhancedContentResponse` sets it unconditionally, defaulting to
+IN_CLOUD; the streaming path threads it into the aggregated
+`streamResult.response`, which is exactly where the code reads it — both
+read sites were verified correct against the shipped `@firebase/ai`
+bundle and type definitions). The bug was in `actualRouteOf()` in
+`src/lib/ai.ts`: it compared the value against the uppercase literals
+`"ON_DEVICE"` / `"IN_CLOUD"`, but the SDK's `InferenceSource` wire values
+are **lowercase** — `ON_DEVICE: "on_device"`, `IN_CLOUD: "in_cloud"`
+(`ai-public.d.ts`). The comparison never matched, so every result
+silently degraded to UNKNOWN. (This also corrects API-surprise note 3
+above, which repeated the uppercase values.) Fix: compare against the
+imported `InferenceSource` enum constants.
+
+### Derivation fallback (defense in depth)
+If a future browser/SDK combination ever leaves `inferenceSource`
+unreported after a successful call, the badge no longer gives up. New
+`deriveRouteDisplay()` in `src/lib/ai.ts` (used by `RouteBadge` in
+`src/components/ui.tsx`) applies, in order:
+1. SDK-reported source wins, exactly as before (ON_DEVICE → "On-device";
+   IN_CLOUD + asked on-device → "Cloud · fallback"; IN_CLOUD + asked
+   cloud → "Cloud").
+2. Unreported + asked cloud → "Cloud".
+3. Unreported + asked on-device + the `LanguageModel.availability()`
+   probe (same probe as the Hybrid status panel, captured right after
+   the call into `AiRunResult.onDeviceAvailability`) says
+   unavailable/unsupported → "Cloud · fallback (on-device unavailable on
+   this device)" — the device provably could not have served it, and
+   `fellBackToCloud` is set so the explanatory note shows too.
+4. Unreported + asked on-device + device model available →
+   "On-device (unconfirmed)" — never more than the evidence supports.
+The full evidentiary rationale is documented in a comment block above
+`deriveRouteDisplay`.
+
+### Panel copy
+`HybridStatus.tsx`: the fallback note now names the badge it promises —
+"…result badges will show “Cloud · fallback”" — which is true again.
+
+### Build + deploy
+- `npm run build` (default base `/`): PASS.
+- `VITE_BASE=/notehybrid/ npm run build`: PASS; `dist/` + `.nojekyll`
+  force-pushed to `gh-pages` (legacy route, as before).
+- Source committed + pushed to `main`.
+
+### Live verification (https://aldy007x.github.io/notehybrid/)
+- Before: `assets/index-ClV-ZKJl.js`.
+- After: `assets/index-DCV9H1S2.js` — asset name/hash changed, index
+  HTTP 200, fetched live bundle contains
+  `Cloud · fallback (on-device unavailable` ×1 and
+  `On-device (unconfirmed)` ×1.
+- Expected live behavior now: in a browser without Gemini Nano (e.g. the
+  cloud test Chromium), an on-device-asked action shows "Cloud · fallback"
+  (SDK-reported IN_CLOUD); a cloud-asked action shows "Cloud".

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { InferenceMode } from "firebase/ai";
 import { useStore } from "../lib/store";
-import type { AiRunResult } from "../lib/ai";
+import { deriveRouteDisplay, type AiRunResult } from "../lib/ai";
 
 /* ── Toasts ─────────────────────────────────────────────────────────── */
 export function Toasts() {
@@ -34,30 +33,24 @@ export function Spinner({ label }: { label?: string }) {
 
 /* ── Route badge: where inference ACTUALLY ran ──────────────────────── */
 /**
- * Honest routing badge. The label is driven by the SDK-reported
- * `inferenceSource` (AiRunResult.actualRoute), never by what we requested:
- * a PREFER_ON_DEVICE request that fell back is shown as cloud fallback.
+ * Honest routing badge. The label comes from `deriveRouteDisplay`: the
+ * SDK-reported `inferenceSource` wins whenever present (a PREFER_ON_DEVICE
+ * request that fell back is shown as cloud fallback); if the SDK ever
+ * leaves the source unreported, the label is derived from the requested
+ * mode + the on-device availability probe and never overclaims
+ * ("On-device (unconfirmed)" is the strongest unreported label).
  */
 export function RouteBadge({ result }: { result: AiRunResult }) {
-  const requested =
-    result.requestedMode === InferenceMode.PREFER_ON_DEVICE
-      ? "on-device"
-      : "cloud";
-  let label: string;
-  let cls: string;
-  if (result.actualRoute === "ON_DEVICE") {
-    label = "On-device";
-    cls = "badge-device";
-  } else if (result.actualRoute === "IN_CLOUD") {
-    label = result.fellBackToCloud ? "Cloud · fallback" : "Cloud";
-    cls = "badge-cloud";
-  } else {
-    label = `Route unreported (asked: ${requested})`;
-    cls = "badge-unknown";
-  }
+  const display = deriveRouteDisplay(result);
+  const cls =
+    display.kind === "device"
+      ? "badge-device"
+      : display.kind === "cloud"
+        ? "badge-cloud"
+        : "badge-unknown";
   return (
     <span className="route-badge-wrap">
-      <span className={`badge ${cls}`}>{label}</span>
+      <span className={`badge ${cls}`}>{display.label}</span>
       <span className="badge badge-latency">{result.latencyMs} ms</span>
     </span>
   );
