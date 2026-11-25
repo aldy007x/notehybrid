@@ -60,6 +60,10 @@ rules from the README.
    The documented default cloud fallback is `gemini-3.5-flash-lite`
    (SDK ≥ 13.0.0); we pin `gemini-2.5-flash-lite` explicitly via
    `inCloudParams` for predictability.
+   **[SUPERSEDED 2026-11-25 — see the fix addendum at the end of this
+   file: the `gemini-2.5-flash-lite` pin was replaced with
+   `gemini-3.5-flash-lite` after live testing showed the older model is
+   no longer available to new users.]**
 3. **`inferenceSource` is real and typed** (`GenerateContentResponse.inferenceSource?: InferenceSource`,
    values `ON_DEVICE` / `IN_CLOUD`, SDK ≥ 12.5.0) — the badge uses it
    verbatim, so fallback is never hidden.

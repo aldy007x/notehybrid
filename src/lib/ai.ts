@@ -30,7 +30,7 @@ import {
 import { getFirebaseServices } from "./firebase";
 
 /** Cloud model used whenever a request is served (or falls back) to cloud. */
-export const CLOUD_MODEL = "gemini-2.5-flash-lite";
+export const CLOUD_MODEL = "gemini-3.5-flash-lite";
 
 /** User-facing routing preference (Settings screen / Remote Config). */
 export type RoutePreference = "auto" | "on-device" | "cloud";

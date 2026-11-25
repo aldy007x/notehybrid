@@ -72,7 +72,7 @@ flowchart TD
 Rules, concretely (see `src/lib/ai.ts`):
 
 1. A fresh hybrid `GenerativeModel` is created per request with
-   `getGenerativeModel(ai, { mode, inCloudParams: { model: "gemini-2.5-flash-lite" } })`.
+   `getGenerativeModel(ai, { mode, inCloudParams: { model: "gemini-3.5-flash-lite" } })`.
 2. `mode` is `PREFER_ON_DEVICE` for inputs under the threshold
    (Remote-Configurable, default 1500 chars) and `PREFER_IN_CLOUD` above
    it — unless the user overrode the preference in Settings.
