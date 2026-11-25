@@ -308,3 +308,5 @@ The full evidentiary rationale is documented in a comment block above
 - Expected live behavior now: in a browser without Gemini Nano (e.g. the
   cloud test Chromium), an on-device-asked action shows "Cloud · fallback"
   (SDK-reported IN_CLOUD); a cloud-asked action shows "Cloud".
+
+- README screenshots added (2026-11-25, commit 8f4a91b): three real frames from the verified demo video now live in docs/screenshots/ (01-workspace.png landing/sign-in, 02-summarize-badge.png Summarize result with "Cloud · fallback" badge, 03-ask-my-notes.png Key points + Ask-my-notes streamed answer with source). The README Screenshots section notes honestly that the capture browser had no Gemini Nano, so badges show the cloud fallback.
