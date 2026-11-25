@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# env & secrets — the Firebase web config is NOT a secret, but keep real
+# environment overrides out of the repo anyway.
+.env
+.env.*
+!.env.example
+
+# Firebase local emulator / CLI state
+.firebase/
+firebase-debug.log
+firestore-debug.log
