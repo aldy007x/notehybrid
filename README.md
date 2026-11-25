@@ -14,7 +14,7 @@ work on flaky connections.
 > Built with **Firebase AI Logic** hybrid inference for the
 > **#BuildHybridAI 2026** hackathon (Web/Chrome platform).
 
-**Live demo:** _coming soon — link will be added here once hosting is deployed._
+**Live demo:** https://aldy007x.github.io/notehybrid/
 
 ## Features
 
