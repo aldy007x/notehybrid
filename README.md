@@ -181,11 +181,16 @@ service cloud.firestore {
 
 ## Screenshots
 
-<!-- TODO: add screenshots before submission -->
-- _Notes workspace with hybrid AI bar_ — `docs/screenshots/workspace.png`
-- _AI result with on-device badge_ — `docs/screenshots/on-device-badge.png`
-- _Ask my notes (streaming)_ — `docs/screenshots/ask.png`
-- _Dark mode_ — `docs/screenshots/dark.png`
+Captured from the live app (frames of the demo video). The capture browser had no Gemini Nano available, so the result badges honestly show the **Cloud · fallback** route — on a Chrome with Gemini Nano, short notes are served on-device and the badge says so.
+
+![NoteHybrid landing and sign-in](docs/screenshots/01-workspace.png)
+_Landing and sign-in — email/password or anonymous guest; "notes that think locally first"._
+
+![Summarize result with Cloud fallback badge](docs/screenshots/02-summarize-badge.png)
+_Summarize on the "Weekly market plan" note — on-device was requested, the SDK served it from the cloud, and the badge says "Cloud · fallback" (2,552 ms) instead of hiding the route._
+
+![Key points and Ask my notes](docs/screenshots/03-ask-my-notes.png)
+_Key points result next to Ask-my-notes: a streamed answer grounded in the note, with its source cited ("Source: Weekly market plan")._
 
 ## Project layout
 
