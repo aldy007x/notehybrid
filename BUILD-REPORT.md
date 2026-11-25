@@ -206,3 +206,42 @@ rules from the README.
   branch (not `main`), future deploys = rebuild with
   `VITE_BASE=/notehybrid/` and force-push `dist/` to `gh-pages` until the
   workflow route is unblocked.
+
+---
+
+## Fix addendum — 2026-11-25 (cloud model retirement: 2.5 → 3.5 flash-lite)
+
+### Problem (found by the live end-to-end test)
+Every cloud AI call returned HTTP 404. Auth, Firestore CRUD, App Check
+attestation, routing and the UI all passed in the automated-browser test;
+the single broken link was the pinned cloud model. Google's error:
+`gemini-2.5-flash-lite` is "no longer available to new users" and directs
+callers to `gemini-3.5-flash-lite` (which is also the documented default
+cloud fallback for SDK ≥ 13.0.0 — see API-surprise note 2 above, now
+annotated as superseded).
+
+### Change
+- `src/lib/ai.ts`: `CLOUD_MODEL = "gemini-3.5-flash-lite"`. This constant
+  is the single source of truth — it feeds every `inCloudParams.model`
+  (single-turn prompts + "Ask my notes" streaming) and the Hybrid status
+  panel's cloud-model display in `src/components/HybridStatus.tsx`, so
+  the AI layer and UI strings moved together with this one edit.
+- `README.md`: architecture rule 1 now names `gemini-3.5-flash-lite`.
+- Remote Config defaults contain no model name (only
+  `inference_preference` / `ai_on_device_max_chars`) — nothing to change.
+- Tree-wide grep for `2.5-flash` / `flash-lite`: the only remaining
+  `gemini-2.5-flash-lite` mentions are the historical notes in this file,
+  annotated SUPERSEDED rather than rewritten.
+
+### Build + deploy
+- `npm run build` (default base `/`): PASS (tsc --noEmit + vite build).
+- Pages build: `VITE_BASE=/notehybrid/ npm run build` → PASS.
+- Source committed + pushed to `main` (commit `b31a90d`).
+- `dist/` (with `.nojekyll`) force-pushed to `gh-pages`
+  (`16a34ef` → `05acd5a`), same legacy route as the release.
+
+### Live verification (https://aldy007x.github.io/notehybrid/)
+- Before: `assets/index-wd5rZzeN.js` — contained `gemini-2.5-flash-lite` ×1.
+- After: `assets/index-ClV-ZKJl.js` — asset name/hash changed, index
+  HTTP 200, fetched bundle contains `gemini-3.5-flash-lite` ×1 and
+  `gemini-2.5-flash-lite` ×0.
