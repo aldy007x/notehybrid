@@ -135,3 +135,70 @@ rules from the README.
 - **Git:** repo initialized locally (not pushed), `.gitignore` verified
   (node_modules/dist/.env excluded), README gained a "Live demo"
   placeholder line, **28 files staged** and ready for the parent's push.
+
+
+---
+
+## Release addendum — 2026-11-25 (App Check key, smoke, GitHub Pages)
+
+### App Check site key + provider class
+- `appCheckSiteKey` in `src/firebase-config.ts` now holds the real site key
+  from the console registration (`6LcskTEuAAAAAIBMA0fbxUXN71NXtLokQRtpe7yT`,
+  public site key, safe to commit).
+- **Deviation, deliberate:** the console registered the web app with the
+  reCAPTCHA Enterprise (Fraud Defense) provider, but the code constructed a
+  `ReCaptchaV3Provider`. Enterprise keys are served by the reCAPTCHA
+  Enterprise JS API and attested via `ReCaptchaEnterpriseProvider`; a v3
+  provider constructed with an Enterprise key would fail attestation, and
+  AI Logic App Check enforcement is "Basic - Enforced", so this would have
+  broken every AI call in production. `src/lib/firebase.ts` now constructs
+  `ReCaptchaEnterpriseProvider` with the same key. Debug-token behavior is
+  unchanged (SDK v13 handles debug mode internally when
+  `self.FIREBASE_APPCHECK_DEBUG_TOKEN` is set, regardless of provider
+  class), and the try/catch no-crash guard is untouched.
+
+### Smoke test (Firestore rules published)
+`node scripts/smoke.mjs` — **ALL PASS**:
+- PASS sign-in-anonymously
+- PASS write-note (`users/<uid>/notes/smoke-test`)
+- PASS read-note (data matches)
+- PASS delete-note
+- PASS sign-out
+
+### Vite base path
+- `vite.config.ts`: `base: process.env.VITE_BASE ?? "/"`. Local builds stay
+  at `/` (verified: rebuilt `dist/index.html` references `/assets/...`);
+  Pages builds use `VITE_BASE=/notehybrid/` (verified: asset path
+  `/notehybrid/assets/...`).
+
+### GitHub repo
+- Created and pushed: **https://github.com/aldy007x/notehybrid** (public,
+  Apache-2.0 LICENSE detected from repo root). `main` branch pushed
+  (29 files; node_modules/dist excluded by .gitignore).
+
+### GitHub Pages — workflow route BLOCKED, legacy route LIVE
+- The Actions workflow (`.github/workflows/deploy-pages.yml`: checkout,
+  Node 20, `npm ci`, build with `VITE_BASE=/notehybrid/`,
+  upload-pages-artifact, deploy-pages) was written as specified, but the
+  push was rejected by GitHub:
+  `refusing to allow an OAuth App to create or update workflow
+  .github/workflows/deploy-pages.yml without workflow scope`.
+  The sandbox `gh` OAuth token lacks the `workflow` scope (same wall hit
+  earlier with the Mergify OIDC probe). Unblock: `gh auth refresh -s
+  workflow` (interactive, needs the user in a browser), then push the file
+  (it is present in the local tree, untracked) and optionally switch Pages
+  `build_type` to `workflow`.
+- Fallback used instead: built locally with `VITE_BASE=/notehybrid/` and
+  pushed the built site to a `gh-pages` branch (with `.nojekyll`). The
+  explicit `POST /pages` enable call returned HTTP 409 "GitHub Pages is
+  already enabled" because the `gh-pages` push had auto-enabled Pages with
+  exactly the intended config: `build_type: legacy`,
+  `source: {branch: "gh-pages", path: "/"}`.
+- Pages build status reached **built**; live verification:
+  `https://aldy007x.github.io/notehybrid/` → HTTP 200, title
+  "NoteHybrid — notes that think locally first", JS bundle asset → HTTP 200.
+- README "Live demo" line now points at the live URL (commit `8514ade`,
+  pushed to `main`). Note: because Pages currently serves the `gh-pages`
+  branch (not `main`), future deploys = rebuild with
+  `VITE_BASE=/notehybrid/` and force-push `dist/` to `gh-pages` until the
+  workflow route is unblocked.
